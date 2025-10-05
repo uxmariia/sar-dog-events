@@ -13,6 +13,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const registrationSchema = z.object({
+  dogName: z.string()
+    .trim()
+    .min(2, "Кличка повинна містити щонайменше 2 символи")
+    .max(50, "Кличка не повинна перевищувати 50 символів"),
+  dogBreed: z.string()
+    .trim()
+    .min(2, "Порода повинна містити щонайменше 2 символи")
+    .max(100, "Порода не повинна перевищувати 100 символів"),
+  notes: z.string()
+    .max(500, "Примітки не повинні перевищувати 500 символів")
+    .optional(),
+});
 
 const Competitions = () => {
   const [user, setUser] = useState<any>(null);
@@ -48,22 +63,34 @@ const Competitions = () => {
       return;
     }
 
+    const rawData = {
+      dogName: formData.get("dogName") as string,
+      dogBreed: formData.get("dogBreed") as string,
+      notes: (formData.get("notes") as string) || undefined,
+    };
+
     try {
+      const validatedData = registrationSchema.parse(rawData);
+
       const { error } = await supabase
         .from("competition_registrations")
         .insert({
           competition_id: competitionId,
           user_id: user.id,
-          dog_name: formData.get("dogName") as string,
-          dog_breed: formData.get("dogBreed") as string,
-          notes: formData.get("notes") as string,
+          dog_name: validatedData.dogName,
+          dog_breed: validatedData.dogBreed,
+          notes: validatedData.notes,
         });
 
       if (error) throw error;
 
       toast.success("Реєстрацію успішно завершено!");
     } catch (error: any) {
-      toast.error(error.message || "Помилка реєстрації");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(error.message || "Помилка реєстрації");
+      }
     }
   };
 

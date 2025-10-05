@@ -9,6 +9,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Shield, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { z } from "zod";
+
+const signUpSchema = z.object({
+  fullName: z.string()
+    .trim()
+    .min(2, "Ім'я повинно містити щонайменше 2 символи")
+    .max(100, "Ім'я не повинно перевищувати 100 символів"),
+  email: z.string()
+    .trim()
+    .email("Невірний формат email")
+    .max(255, "Email не повинен перевищувати 255 символів"),
+  password: z.string()
+    .min(8, "Пароль повинен містити щонайменше 8 символів")
+    .regex(/[A-Z]/, "Пароль повинен містити хоча б одну велику літеру")
+    .regex(/[a-z]/, "Пароль повинен містити хоча б одну малу літеру")
+    .regex(/[0-9]/, "Пароль повинен містити хоча б одну цифру"),
+});
+
+const signInSchema = z.object({
+  email: z.string()
+    .trim()
+    .email("Невірний формат email")
+    .max(255, "Email не повинен перевищувати 255 символів"),
+  password: z.string()
+    .min(1, "Пароль обов'язковий"),
+});
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -38,17 +64,21 @@ const Auth = () => {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const fullName = formData.get("fullName") as string;
+    const rawData = {
+      email: formData.get("email") as string,
+      password: formData.get("password") as string,
+      fullName: formData.get("fullName") as string,
+    };
 
     try {
+      const validatedData = signUpSchema.parse(rawData);
+
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: validatedData.email,
+        password: validatedData.password,
         options: {
           data: {
-            full_name: fullName,
+            full_name: validatedData.fullName,
           },
           emailRedirectTo: `${window.location.origin}/`,
         },
@@ -58,7 +88,11 @@ const Auth = () => {
 
       toast.success("Реєстрація успішна! Перенаправляємо...");
     } catch (error: any) {
-      toast.error(error.message || "Помилка реєстрації");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(error.message || "Помилка реєстрації");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -69,20 +103,28 @@ const Auth = () => {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
+    const rawData = {
+      email: formData.get("email") as string,
+      password: formData.get("password") as string,
+    };
 
     try {
+      const validatedData = signInSchema.parse(rawData);
+
       const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: validatedData.email,
+        password: validatedData.password,
       });
 
       if (error) throw error;
 
       toast.success("Вхід успішний! Перенаправляємо...");
     } catch (error: any) {
-      toast.error(error.message || "Помилка входу");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(error.message || "Помилка входу");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -181,9 +223,12 @@ const Auth = () => {
                       type="password"
                       placeholder="••••••••"
                       required
-                      minLength={6}
+                      minLength={8}
                       disabled={isLoading}
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Мінімум 8 символів, включаючи велику літеру, малу літеру та цифру
+                    </p>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Реєстрація..." : "Зареєструватися"}
